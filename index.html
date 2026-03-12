@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>オコジョ先生のかたちあわせ</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div id="app-container">
+        <!-- Title Screen -->
+        <div id="title-screen" class="screen active">
+            <button class="settings-btn" id="open-settings-btn" onclick="openSettings()">⚙️ 設定</button>
+            <h1 class="title-text">オコジョせんせいの<br>かたちあわせ</h1>
+            <img src="okojo.jpg" alt="オコジョ先生" class="character-img">
+            <div class="menu-container">
+                <div class="game-mode-section">
+                    <div class="mode-title">おなじかたちを さがそう</div>
+                    <div class="level-btn-container">
+                        <button class="level-btn" onclick="startStep(5, 1)">レベル 1</button>
+                        <button class="level-btn" onclick="startStep(5, 2)">レベル 2</button>
+                        <button class="level-btn" onclick="startStep(5, 3)">レベル 3</button>
+                    </div>
+                </div>
+                <div class="game-mode-section">
+                    <div class="mode-title">まわして あわせよう</div>
+                    <div class="level-btn-container">
+                        <button class="level-btn" onclick="startStep(6, 1)">レベル 1</button>
+                        <button class="level-btn" onclick="startStep(6, 2)">レベル 2</button>
+                        <button class="level-btn" onclick="startStep(6, 3)">レベル 3</button>
+                    </div>
+                </div>
+                <div class="game-mode-section">
+                    <div class="mode-title">まわして さがそう</div>
+                    <div class="level-btn-container">
+                        <button class="level-btn" onclick="startStep(7, 1)">レベル 1</button>
+                        <button class="level-btn" onclick="startStep(7, 2)">レベル 2</button>
+                        <button class="level-btn" onclick="startStep(7, 3)">レベル 3</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Level Clear Modal -->
+        <div id="clear-modal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <img src="okojo.jpg" alt="オコジョ先生" class="modal-character-img">
+                <div class="modal-speech-bubble" id="modal-message">
+                    よくできたね！<br>つぎの レベルに すすむよ！
+                </div>
+                <button class="modal-btn" id="modal-next-btn" onclick="nextLevelFromModal()">つぎへ</button>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="modal-overlay hidden">
+            <div class="modal-content settings-content">
+                <h2>せってい</h2>
+
+                <div class="settings-section">
+                    <h3>ずけいの いろ</h3>
+                    <div class="color-options">
+                        <label class="color-option">
+                            <input type="radio" name="rail-color" value="#81D4FA" checked onchange="updateSettings()">
+                            <span class="color-swatch" style="background-color: #81D4FA;"></span>
+                        </label>
+                        <label class="color-option">
+                            <input type="radio" name="rail-color" value="#F48FB1" onchange="updateSettings()">
+                            <span class="color-swatch" style="background-color: #F48FB1;"></span>
+                        </label>
+                        <label class="color-option">
+                            <input type="radio" name="rail-color" value="#FFE082" onchange="updateSettings()">
+                            <span class="color-swatch" style="background-color: #FFE082;"></span>
+                        </label>
+                        <label class="color-option">
+                            <input type="radio" name="rail-color" value="#A5D6A7" onchange="updateSettings()">
+                            <span class="color-swatch" style="background-color: #A5D6A7;"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>まわしかた（ステップ6）</h3>
+                    <div class="mode-options">
+                        <label class="mode-option">
+                            <input type="radio" name="rotation-mode" value="tap" checked onchange="updateSettings()">
+                            <span>タップ</span>
+                        </label>
+                        <label class="mode-option">
+                            <input type="radio" name="rotation-mode" value="drag" onchange="updateSettings()">
+                            <span>ドラッグ</span>
+                        </label>
+                    </div>
+                </div>
+
+                <button class="modal-btn" onclick="closeSettings()">とじる</button>
+            </div>
+        </div>
+
+        <!-- Step 5 Screen -->
+        <div id="step5-screen" class="screen">
+            <div class="header">
+                <button class="back-btn" onclick="showTitle()">もどる</button>
+                <div class="level-info">
+                    <span id="step5-level-text" class="level-text">レベル 1</span>
+                    <span id="step5-progress-text" class="progress-text">1 / 5</span>
+                </div>
+                <h2>おなじかたちは どれかな？</h2>
+            </div>
+            <div class="game-area">
+                <div id="target-shape-container" class="target-container"></div>
+                <div id="choices-container" class="choices-container"></div>
+            </div>
+            <!-- アドバイスフッター -->
+            <div class="character-footer">
+                <img src="okojo.jpg" alt="オコジョ先生" class="footer-character-img">
+                <div class="footer-speech-bubble" id="step5-advice">
+                    おなじかたちは どれかな？ ドロップしてみよう！
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 6 Screen -->
+        <div id="step6-screen" class="screen">
+            <div class="header">
+                <button class="back-btn" onclick="showTitle()">もどる</button>
+                <div class="level-info">
+                    <span id="step6-level-text" class="level-text">レベル 1</span>
+                    <span id="step6-progress-text" class="progress-text">1 / 5</span>
+                </div>
+                <h2>タップして みほんと おなじにしよう！</h2>
+            </div>
+            <div class="game-area">
+                <div id="step6-model" class="step6-model-container"></div>
+                <div id="step6-interactive-piece" class="interactive-piece-container">
+                </div>
+            </div>
+            <!-- アドバイスフッター -->
+            <div class="character-footer">
+                <img src="okojo.jpg" alt="オコジョ先生" class="footer-character-img">
+                <div class="footer-speech-bubble" id="step6-advice">
+                    まわして みほんに あわせよう！
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 7 Screen -->
+        <div id="step7-screen" class="screen">
+            <div class="header">
+                <button class="back-btn" onclick="showTitle()">もどる</button>
+                <div class="level-info">
+                    <span id="step7-level-text" class="level-text">レベル 1</span>
+                    <span id="step7-progress-text" class="progress-text">1 / 5</span>
+                </div>
+                <h2>まわして おなじ かたちを さがそう！</h2>
+            </div>
+            <div class="game-area step7-area">
+                <div id="step7-target-container" class="target-container"></div>
+                <div id="step7-choices-container" class="choices-container"></div>
+            </div>
+            <!-- アドバイスフッター -->
+            <div class="character-footer">
+                <img src="okojo.jpg" alt="オコジョ先生" class="footer-character-img">
+                <div class="footer-speech-bubble" id="step7-advice">
+                    くるくるまわして、おなじかたちを ドロップしよう！
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
