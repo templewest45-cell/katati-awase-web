@@ -2,6 +2,47 @@
 let currentStep = 0;
 let step5TargetIndex = 0;
 
+// クリア状況のデータ管理
+let clearData = {
+    5: { 1: false, 2: false, 3: false },
+    6: { 1: false, 2: false, 3: false },
+    7: { 1: false, 2: false, 3: false }
+};
+
+function loadClearData() {
+    const data = localStorage.getItem('okojo_rail_clear_data');
+    if (data) {
+        clearData = JSON.parse(data);
+    }
+}
+
+function saveClearData() {
+    localStorage.setItem('okojo_rail_clear_data', JSON.stringify(clearData));
+    renderClearBadges();
+}
+
+function renderClearBadges() {
+    for (let step in clearData) {
+        let allClear = true;
+        for (let level in clearData[step]) {
+            const btn = document.getElementById(`btn-${step}-${level}`);
+            if (btn) {
+                btn.textContent = `レベル ${level}` + (clearData[step][level] ? " ⭐" : "");
+            }
+            if (!clearData[step][level]) {
+                allClear = false;
+            }
+        }
+        const crown = document.getElementById(`crown-${step}`);
+        if (crown) {
+            crown.textContent = allClear ? "👑" : "";
+        }
+    }
+}
+
+// 初期ロード
+loadClearData();
+
 // Settings State
 let currentRailColor = "#81D4FA"; // Default
 let currentRotationMode = "tap"; // "tap" or "drag"
@@ -16,7 +57,7 @@ let step7TargetRot = 0;
 // Step 5 Level Data
 const STEP5_LEVEL_DATA = {
     1: [ // 導入期：明確に違いがわかる形
-        { target: "M 10 50 L 90 50", distractors: ["M 10 50 Q 25 20 40 50 T 70 50 T 100 50", "M 10 50 L 30 20 L 50 80 L 70 20 L 90 50"] }, // 直線 vs 波線/ジグザグ
+        { target: "M 10 50 L 90 50", distractors: ["M 10 50 Q 23.3 20 36.6 50 T 63.3 50 T 90 50", "M 10 50 L 30 20 L 50 80 L 70 20 L 90 50"] }, // 直線 vs 波線/ジグザグ
         { target: "M 50 10 A 40 40 0 1 1 49.9 10", distractors: ["M 20 20 L 20 60 A 30 30 0 0 0 80 60 L 80 20", "M 80 20 A 40 40 0 0 0 80 80"] }, // 丸 vs U字/C字
         { target: "M 50 10 L 50 90 M 10 50 L 90 50", distractors: ["M 10 30 L 90 30 M 10 70 L 90 70", "M 20 20 L 80 80 M 20 80 L 80 20"] }, // 十字 vs 二本線/バツ
         { target: "M 20 20 L 80 20 L 80 80 L 20 80 Z", distractors: ["M 50 10 A 40 40 0 1 1 49.9 10", "M 50 10 L 90 80 L 10 80 Z"] }, // 四角 vs 丸/三角
@@ -44,7 +85,7 @@ let step5MaxLevel = 3;
 
 function createRailSVG(pathD) {
     return `
-        <svg viewBox="0 0 100 100" class="rail-shape" width="100%" height="100%">
+        <svg viewBox="-12 -12 124 124" class="rail-shape" width="100%" height="100%">
             <!-- 黒縁で設定色に塗りつぶされた図形 -->
             <path d="${pathD}" stroke="#333" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" fill="none" />
             <path d="${pathD}" stroke="${currentRailColor}" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none" />
@@ -92,6 +133,7 @@ function showScreen(screenId) {
 
 function showTitle() {
     currentStep = 0;
+    renderClearBadges(); // クリア状況のバッジを更新
     showScreen('title-screen');
 }
 
@@ -112,6 +154,16 @@ function startStep(stepNum, level = 1) {
 // Modal Logic
 let modalNextAction = null;
 function showLevelClearModal(message, isAllClear) {
+    // クリア状況を記録
+    if (currentStep === 5) {
+        clearData[5][step5CurrentLevel] = true;
+    } else if (currentStep === 6) {
+        clearData[6][step6CurrentLevel] = true;
+    } else if (currentStep === 7) {
+        clearData[7][step7CurrentLevel] = true;
+    }
+    saveClearData(); // 保存
+
     const modal = document.getElementById('clear-modal');
     document.getElementById('modal-message').innerHTML = message;
     const btn = document.getElementById('modal-next-btn');
@@ -291,22 +343,14 @@ function setupStep5Draggable(element, isCorrect) {
                     const levelData = STEP5_LEVEL_DATA[step5CurrentLevel];
 
                     if (step5CurrentQuestion >= levelData.length) {
-                        // 次のレベルへ
-                        step5CurrentLevel++;
-                        step5CurrentQuestion = 0;
-
-                        if (step5CurrentLevel > step5MaxLevel) {
-                            // 全レベルクリア
-                            alert("全レベルクリア！おめでとう！");
-                            showTitle();
-                            return;
+                        if (step5CurrentLevel >= step5MaxLevel) {
+                            showLevelClearModal("すごい！<br>ぜんぶ クリアしたよ！", true);
                         } else {
-                            // レベルアップ演出など挟むと良いが、とりあえず次へ
-                            alert(`レベル ${step5CurrentLevel} にすすむよ！`);
+                            showLevelClearModal(`レベル ${step5CurrentLevel + 1} にすすむよ！`, false);
                         }
+                    } else {
+                        generateStep5Problem();
                     }
-
-                    generateStep5Problem();
                 }, 2000);
             } else {
                 // Wrong type dragged to target
