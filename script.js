@@ -851,12 +851,15 @@ function setupStep7Draggable(element, innerTile) {
     }
 
     // Main Drag&Drop or Tap logic
-    let touchMoved = false;
+    let moveTotalDist = 0;
+    let pointerDownX = 0, pointerDownY = 0;
 
     element.addEventListener('pointerdown', (e) => {
         if (isDraggingRot) return;
         isDraggingPos = true;
-        touchMoved = false;
+        moveTotalDist = 0;
+        pointerDownX = e.clientX;
+        pointerDownY = e.clientY;
 
         // Disable scroll gesture behavior temporarily
         document.body.style.touchAction = 'none';
@@ -875,7 +878,8 @@ function setupStep7Draggable(element, innerTile) {
 
     element.addEventListener('pointermove', (e) => {
         if (!isDraggingPos) return;
-        touchMoved = true;
+        // 移動距離を累積
+        moveTotalDist = Math.hypot(e.clientX - pointerDownX, e.clientY - pointerDownY);
 
         x = e.clientX - element.dataset.startX;
         y = e.clientY - element.dataset.startY;
@@ -892,8 +896,11 @@ function setupStep7Draggable(element, innerTile) {
 
         document.body.style.touchAction = ''; // restore
 
+        // 移動距離が10px未満ならタップとみなす（スマホの微小な指のブレを許容）
+        const wasTap = moveTotalDist < 10;
+
         // Tap rotation handling logic
-        if (!touchMoved) {
+        if (wasTap) {
             // It was a tap, rotate by 90 if mode is tap
             if (currentRotationMode === 'tap') {
                 let currentRot = parseInt(element.dataset.rot, 10);
