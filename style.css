@@ -23,6 +23,7 @@ body {
     justify-content: center;
     align-items: center;
     min-height: 100vh;
+    min-height: 100dvh;
     overflow: hidden;
     user-select: none;
     -webkit-user-select: none;
@@ -33,6 +34,7 @@ body {
     max-width: 100%;
     /* 全画面へ拡張 */
     height: 100vh;
+    height: 100dvh;
     background-color: rgba(255, 255, 255, 0.4);
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
     position: relative;
@@ -657,6 +659,7 @@ body {
     /* transform で回転角度に応じた位置に移動（JSから設定） */
     transform-origin: 20px 20px;
     transition: transform 0.05s linear;
+    touch-action: none;
 }
 
 .rotation-handle::after {
