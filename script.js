@@ -140,14 +140,14 @@ function showTitle() {
 function startStep(stepNum, level = 1) {
     currentStep = stepNum;
     if (stepNum === 5) {
-        initStep5(level);
         showScreen('step5-screen');
+        initStep5(level);
     } else if (stepNum === 6) {
-        initStep6(level);
         showScreen('step6-screen');
+        initStep6(level);
     } else if (stepNum === 7) {
-        initStep7(level);
         showScreen('step7-screen');
+        initStep7(level);
     }
 }
 
@@ -312,6 +312,11 @@ function setupStep5Draggable(element, isCorrect) {
 
         // Check distance to target
         const targetContainer = document.getElementById('target-shape-container');
+        
+        // Remove transition to get exact layout dimensions without animation smoothing
+        const oldTransition = element.style.transition;
+        element.style.transition = 'none';
+        
         const myRect = element.getBoundingClientRect();
         const targetRect = targetContainer.getBoundingClientRect();
 
@@ -355,11 +360,13 @@ function setupStep5Draggable(element, isCorrect) {
             } else {
                 // Wrong type dragged to target
                 element.classList.add('wrong');
+                element.style.transition = oldTransition || 'all 0.3s';
                 snapBackStep5(element);
                 setTimeout(() => element.classList.remove('wrong'), 500);
             }
         } else {
             // Dropped outside target
+            element.style.transition = oldTransition || 'all 0.3s';
             snapBackStep5(element);
         }
     });
@@ -417,6 +424,7 @@ let step6MaxLevel = 3;
 let step6CurrentType = '';
 let step6TargetRot = 0;
 let step6CurrentRot = 0;
+let step6BaseOffset = 0; // 斜め出題時は45、通常は0
 
 // Step 7 Level Data (組み合わせ)
 const STEP7_LEVEL_DATA = {
@@ -434,12 +442,12 @@ const STEP7_LEVEL_DATA = {
         { target: "L", distractors: ["I", "T"] },
         { target: "V", distractors: ["T", "L"] }
     ],
-    3: [ // 応用期：3択、複雑で引っかけやすい形
-        { target: "S", distractors: ["Z", "E"] },
-        { target: "Z", distractors: ["S", "F"] },
+    3: [ // 応用期：3択、複雑で引っかけやすい形（S/Zは回転で同じ見た目になるため同時出題しない）
+        { target: "S", distractors: ["E", "F"] },
+        { target: "Z", distractors: ["E", "T"] },
         { target: "E", distractors: ["F", "L"] },
         { target: "F", distractors: ["E", "T"] },
-        { target: "S", distractors: ["E", "Z"] }
+        { target: "S", distractors: ["F", "L"] }
     ]
 };
 
@@ -453,6 +461,30 @@ function getTilePath(type) {
     if (type === 'E') return "M 80 20 L 20 20 L 20 80 L 80 80 M 20 50 L 60 50";
     if (type === 'F') return "M 20 80 L 20 20 L 80 20 M 20 50 L 60 50";
     return "";
+}
+
+// 視覚的に同一となる形+回転の組み合わせを正規化キーとして返す
+// S字とZ字: 90度回転で互換＋180度対称のため、実質2グループのみ
+//   グループA: S(0°) = S(180°) = Z(90°) = Z(270°)
+//   グループB: S(90°) = S(270°) = Z(0°) = Z(180°)
+// I字: 180度回転対称
+function getVisualKey(type, rotation) {
+    const rot = ((rotation % 360) + 360) % 360;
+    // S字とZ字は90度回転で互いに変換され、かつ180度回転対称
+    if (type === 'S') {
+        if (rot === 0 || rot === 180) return 'curve_A'; // グループA
+        if (rot === 90 || rot === 270) return 'curve_B'; // グループB
+    }
+    if (type === 'Z') {
+        if (rot === 90 || rot === 270) return 'curve_A'; // グループA (= S(0°))
+        if (rot === 0 || rot === 180) return 'curve_B'; // グループB (= S(90°))
+    }
+    // I字は180度回転対称
+    if (type === 'I') {
+        return 'I_' + (rot % 180);
+    }
+    // その他の形はそのまま
+    return type + '_' + rot;
 }
 
 function createTileStr(type, rotation) {
@@ -513,17 +545,13 @@ function generateStep6Problem() {
     step6CurrentType = types[Math.floor(Math.random() * types.length)];
 
     // 正解の角度（目標）をランダムに設定
-    // 導入期の「斜め」を取り入れるため、45度単位のベースから選べるようにすることもできるが、
-    // ここでは90度単位でのパズルとしつつ、初期角度の見た目的なバリエーションで対応する。
-    // （今回はSVG自体のベースをそのまま使い、CSSで回す仕様）
-
-    // I字かつレベル1の場合は、斜め（45度/135度等）も出題してみる
     let rotStep = 90;
     let baseOffset = 0;
+    // I字かつレベル1の場合は、斜め（45度/135度等）も出題してみる
     if (step6CurrentLevel === 1 && Math.random() > 0.5) {
-        rotStep = 90;
         baseOffset = 45; // 45度ずらした状態で斜めの棒にする
     }
+    step6BaseOffset = baseOffset; // ドラッグスナップ用に保存
 
     step6TargetRot = baseOffset + Math.floor(Math.random() * 4) * rotStep;
 
@@ -556,7 +584,9 @@ function generateStep6Problem() {
     }
 
     tileInner.innerHTML = createRailSVG(getTilePath(step6CurrentType));
-    tileInner.style.transform = `rotate(${step6CurrentRot}deg)`;
+    // 初期回転とハンドル位置を一括で更新（レンダリング後にも再計算して確実に反映）
+    updateStep6RotationDisplay();
+    requestAnimationFrame(() => updateStep6RotationDisplay());
 
     // Set up click handler for tap mode on the container
     pieceContainer.onclick = (e) => {
@@ -576,6 +606,8 @@ function isCorrectRotation(type, current, target) {
     return (current % 360) === (target % 360);
 }
 
+let step6CheckTimeoutId = null;
+
 function rotateStep6Piece() {
     const pieceContainer = document.getElementById('step6-interactive-piece');
     if (pieceContainer.classList.contains('correct')) return; // 正解後は押せない
@@ -583,7 +615,10 @@ function rotateStep6Piece() {
     // 90度回転
     step6CurrentRot = (step6CurrentRot + 90) % 360;
     updateStep6RotationDisplay();
-    checkStep6Answer();
+    
+    // 回転アニメーション（1.2s）が完了してから判定する
+    if (step6CheckTimeoutId) clearTimeout(step6CheckTimeoutId);
+    step6CheckTimeoutId = setTimeout(checkStep6Answer, 1200);
 }
 
 function updateStep6RotationDisplay() {
@@ -591,6 +626,13 @@ function updateStep6RotationDisplay() {
     const tileInner = pieceContainer.querySelector('.rail-tile');
     if (tileInner) {
         tileInner.style.transform = `rotate(${step6CurrentRot}deg)`;
+    }
+    // ハンドルも回転角度に連動させる（コンテナ中心を軸に回る）
+    const handle = pieceContainer.querySelector('.rotation-handle');
+    if (handle) {
+        const containerRect = pieceContainer.getBoundingClientRect();
+        const radius = containerRect.width / 2 + 5; // コンテナの端にハンドルを配置
+        handle.style.transform = `rotate(${step6CurrentRot}deg) translateY(-${radius}px)`;
     }
 }
 
@@ -644,6 +686,7 @@ function setupStep6Drag(handle, container) {
 
         const tileInner = container.querySelector('.rail-tile');
         if (tileInner) tileInner.style.transition = 'none'; // 滑らかに回すため一旦切る
+        handle.style.transition = 'none'; // ハンドルも追従のためtransition無効
     });
 
     handle.addEventListener('pointermove', (e) => {
@@ -664,12 +707,14 @@ function setupStep6Drag(handle, container) {
         isDragging = false;
         handle.releasePointerCapture(e.pointerId);
 
-        // スナップ（90度単位に一番近いものへ）
-        step6CurrentRot = Math.round(step6CurrentRot / 90) * 90 % 360;
-        if (step6CurrentRot < 0) step6CurrentRot += 360;
+        // スナップ（baseOffset考慮で90度単位に一番近いものへ）
+        let adjusted = step6CurrentRot - step6BaseOffset;
+        adjusted = Math.round(adjusted / 90) * 90;
+        step6CurrentRot = ((adjusted + step6BaseOffset) % 360 + 360) % 360;
 
         const tileInner = container.querySelector('.rail-tile');
         if (tileInner) tileInner.style.transition = 'transform 0.1s ease';
+        handle.style.transition = 'transform 0.1s ease'; // スナップアニメーション
         updateStep6RotationDisplay();
 
         // 少し待ってから判定（アニメーション完了後）
@@ -738,13 +783,29 @@ function generateStep7Problem() {
     // Draw the target
     targetContainer.innerHTML = createTileStr(step7CurrentType, step7TargetRot);
 
+    // 視覚的に重複しない初期回転を割り当てる
+    let usedVisualKeys = new Set();
+
+    function pickNonDuplicateRot(type) {
+        let attempts = 0;
+        let rot;
+        do {
+            rot = Math.floor(Math.random() * 4) * 90;
+            attempts++;
+        } while (usedVisualKeys.has(getVisualKey(type, rot)) && attempts < 20);
+        usedVisualKeys.add(getVisualKey(type, rot));
+        return rot;
+    }
+
+    const correctRot = pickNonDuplicateRot(step7CurrentType);
     let choices = [
-        { type: step7CurrentType, isCorrect: true, initialRot: Math.floor(Math.random() * 4) * 90 }
+        { type: step7CurrentType, isCorrect: true, initialRot: correctRot }
     ];
 
     // distractors
     problemData.distractors.forEach(d => {
-        choices.push({ type: d, isCorrect: false, initialRot: Math.floor(Math.random() * 4) * 90 });
+        const dRot = pickNonDuplicateRot(d);
+        choices.push({ type: d, isCorrect: false, initialRot: dRot });
     });
 
     choices.sort(() => Math.random() - 0.5);
@@ -808,6 +869,13 @@ function setupStep7Draggable(element, innerTile) {
         handle.className = 'rotation-handle';
         element.appendChild(handle);
 
+        const updateHandlePos = (rot) => {
+            const rect = element.getBoundingClientRect();
+            const radius = rect.width / 2 + 5;
+            handle.style.transform = `rotate(${rot}deg) translateY(-${radius}px)`;
+        };
+        requestAnimationFrame(() => updateHandlePos(parseInt(element.dataset.rot, 10)));
+
         let rotCenterX, rotCenterY, startAngle, initialRotVal;
 
         handle.addEventListener('pointerdown', (e) => {
@@ -821,6 +889,7 @@ function setupStep7Draggable(element, innerTile) {
             startAngle = Math.atan2(e.clientY - rotCenterY, e.clientX - rotCenterX) * 180 / Math.PI;
             initialRotVal = parseInt(element.dataset.rot, 10);
             innerTile.style.transition = 'none';
+            handle.style.transition = 'none';
         });
 
         handle.addEventListener('pointermove', (e) => {
@@ -831,6 +900,7 @@ function setupStep7Draggable(element, innerTile) {
             let newRot = (initialRotVal + delta) % 360;
             if (newRot < 0) newRot += 360;
             innerTile.style.transform = `rotate(${newRot}deg)`;
+            updateHandlePos(newRot);
             element.dataset.rot = newRot; // temp store
         });
 
@@ -847,6 +917,8 @@ function setupStep7Draggable(element, innerTile) {
             element.dataset.rot = snappedRot;
             innerTile.style.transition = 'transform 0.1s ease';
             innerTile.style.transform = `rotate(${snappedRot}deg)`;
+            handle.style.transition = 'transform 0.1s ease';
+            updateHandlePos(snappedRot);
         });
     }
 
@@ -906,6 +978,7 @@ function setupStep7Draggable(element, innerTile) {
                 let currentRot = parseInt(element.dataset.rot, 10);
                 currentRot = (currentRot + 90) % 360;
                 element.dataset.rot = currentRot;
+                innerTile.style.transition = 'transform 1.2s ease'; // タップ時の回転をさらに遅く（1.2s）
                 innerTile.style.transform = `rotate(${currentRot}deg)`;
             }
             snapBackStep7(element);
@@ -928,8 +1001,20 @@ function setupStep7Draggable(element, innerTile) {
         if (dist < 60) {
             // Dropped correctly inside area, now evaluate correctness
             if (checkStep7AnswerLogic(element)) {
-                // Completely Correct!
-                element.style.transform = `scale(1) translate(${targetCenterX - dropCenterX + x}px, ${targetCenterY - dropCenterY + y}px)`;
+                // 完全一致！
+                
+                // 一旦アニメーションを無効化し、scale(1)での正確なBoundingRectを取得する
+                const oldTransition7 = element.style.transition;
+                element.style.transition = 'none';
+                element.style.transform = `scale(1) translate(${x}px, ${y}px)`;
+                
+                const exactRect = element.getBoundingClientRect();
+                const exactDropCenterX = exactRect.left + exactRect.width / 2;
+                const exactDropCenterY = exactRect.top + exactRect.height / 2;
+                
+                element.style.transition = oldTransition7 || 'all 0.3s ease';
+                // 正確な中心座標とターゲット中心座標の差分をx,yに足し込む
+                element.style.transform = `scale(1) translate(${targetCenterX - exactDropCenterX + x}px, ${targetCenterY - exactDropCenterY + y}px)`;
                 element.classList.remove('dragging');
 
                 setTimeout(() => triggerConfetti(), 300);
