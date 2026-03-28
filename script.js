@@ -505,13 +505,20 @@ function updateStep6UI() {
 
     const advice = document.getElementById('step6-advice');
     if (step6CurrentLevel === 1) {
-        advice.textContent = "タップで まわして みほんに あわせよう！";
+        advice.textContent = "まわして みほんに かさねよう！";
     } else if (step6CurrentLevel === 2) {
-        advice.textContent = "むきに きをつけて！ ピッタリ あうかな？";
+        advice.textContent = "むきに きをつけて！ かさねて みよう！";
     } else {
-        advice.textContent = "むずかしい かたちだね！ よく みて まわそう！";
+        advice.textContent = "むずかしい かたちだね！ まわして かさねよう！";
     }
 }
+
+// Step 6 ドラッグ移動用の状態
+let step6IsDragging = false;
+let step6DragStartX = 0, step6DragStartY = 0;
+let step6TranslateX = 0, step6TranslateY = 0;
+let step6MoveTotalDist = 0;
+let step6PointerDownX = 0, step6PointerDownY = 0;
 
 function generateStep6Problem() {
     updateStep6UI();
@@ -520,6 +527,13 @@ function generateStep6Problem() {
     const pieceContainer = document.getElementById('step6-interactive-piece');
 
     pieceContainer.classList.remove('correct');
+    pieceContainer.classList.remove('wrong');
+
+    // ドラッグ位置をリセット
+    step6TranslateX = 0;
+    step6TranslateY = 0;
+    pieceContainer.style.transform = '';
+    pieceContainer.style.zIndex = '';
 
     // 操作モードのUI反映
     if (currentRotationMode === 'drag') {
@@ -534,7 +548,6 @@ function generateStep6Problem() {
         }
     } else {
         pieceContainer.removeAttribute('data-mode');
-        // Tap handler is set up later in replace
     }
 
     const levelData = STEP6_LEVEL_DATA[step6CurrentLevel];
@@ -588,12 +601,11 @@ function generateStep6Problem() {
     updateStep6RotationDisplay();
     requestAnimationFrame(() => updateStep6RotationDisplay());
 
-    // Set up click handler for tap mode on the container
-    pieceContainer.onclick = (e) => {
-        // ドラッグモードの時はクリック回転を無効化
-        if (currentRotationMode === 'drag') return;
-        rotateStep6Piece();
-    };
+    // ドラッグ移動のセットアップ（重複防止のためフラグで管理）
+    if (!pieceContainer._step6DragSetup) {
+        setupStep6DragMove(pieceContainer);
+        pieceContainer._step6DragSetup = true;
+    }
 }
 
 // 形によって対称性がある場合の判定ヘルパー
@@ -606,8 +618,6 @@ function isCorrectRotation(type, current, target) {
     return (current % 360) === (target % 360);
 }
 
-let step6CheckTimeoutId = null;
-
 function rotateStep6Piece() {
     const pieceContainer = document.getElementById('step6-interactive-piece');
     if (pieceContainer.classList.contains('correct')) return; // 正解後は押せない
@@ -615,10 +625,7 @@ function rotateStep6Piece() {
     // 90度回転
     step6CurrentRot = (step6CurrentRot + 90) % 360;
     updateStep6RotationDisplay();
-    
-    // 回転アニメーション（1.2s）が完了してから判定する
-    if (step6CheckTimeoutId) clearTimeout(step6CheckTimeoutId);
-    step6CheckTimeoutId = setTimeout(checkStep6Answer, 1200);
+    // 回転だけでは正解にならない（見本に重ねて判定）
 }
 
 function updateStep6RotationDisplay() {
@@ -636,29 +643,137 @@ function updateStep6RotationDisplay() {
     }
 }
 
-function checkStep6Answer() {
+function checkStep6AnswerOnDrop() {
     const pieceContainer = document.getElementById('step6-interactive-piece');
     if (pieceContainer.classList.contains('correct')) return;
 
-    if (isCorrectRotation(step6CurrentType, step6CurrentRot, step6TargetRot)) {
-        pieceContainer.classList.add('correct');
-        setTimeout(() => triggerConfetti(), 100);
+    // ドロップ位置と見本の距離を計算
+    const modelContainer = document.getElementById('step6-model');
+    const pieceRect = pieceContainer.getBoundingClientRect();
+    const modelRect = modelContainer.getBoundingClientRect();
 
-        setTimeout(() => {
-            step6CurrentQuestion++;
-            const levelData = STEP6_LEVEL_DATA[step6CurrentLevel];
+    const pieceCx = pieceRect.left + pieceRect.width / 2;
+    const pieceCy = pieceRect.top + pieceRect.height / 2;
+    const modelCx = modelRect.left + modelRect.width / 2;
+    const modelCy = modelRect.top + modelRect.height / 2;
 
-            if (step6CurrentQuestion >= levelData.length) {
-                if (step6CurrentLevel >= step6MaxLevel) {
-                    showLevelClearModal("すごい！<br>ぜんぶ クリアしたよ！", true);
+    const dist = Math.hypot(pieceCx - modelCx, pieceCy - modelCy);
+
+    if (dist < 60) {
+        // 見本の上にドロップされた
+        if (isCorrectRotation(step6CurrentType, step6CurrentRot, step6TargetRot)) {
+            // 正解！見本にスナップ
+            const snapX = step6TranslateX + (modelCx - pieceCx);
+            const snapY = step6TranslateY + (modelCy - pieceCy);
+            pieceContainer.style.transition = 'transform 0.2s ease';
+            pieceContainer.style.transform = `translate(${snapX}px, ${snapY}px)`;
+            step6TranslateX = snapX;
+            step6TranslateY = snapY;
+
+            pieceContainer.classList.add('correct');
+            setTimeout(() => triggerConfetti(), 100);
+
+            setTimeout(() => {
+                step6CurrentQuestion++;
+                const levelData = STEP6_LEVEL_DATA[step6CurrentLevel];
+
+                if (step6CurrentQuestion >= levelData.length) {
+                    if (step6CurrentLevel >= step6MaxLevel) {
+                        showLevelClearModal("すごい！<br>ぜんぶ クリアしたよ！", true);
+                    } else {
+                        showLevelClearModal(`レベル ${step6CurrentLevel} クリア！<br>つぎに すすむよ！`, false);
+                    }
                 } else {
-                    showLevelClearModal(`レベル ${step6CurrentLevel} クリア！<br>つぎに すすむよ！`, false);
+                    generateStep6Problem();
                 }
-            } else {
-                generateStep6Problem();
-            }
-        }, 1500);
+            }, 1500);
+        } else {
+            // 回転が合っていない
+            pieceContainer.classList.add('wrong');
+            snapBackStep6(pieceContainer);
+            setTimeout(() => pieceContainer.classList.remove('wrong'), 500);
+        }
+    } else {
+        // 見本の外にドロップ
+        snapBackStep6(pieceContainer);
     }
+}
+
+function snapBackStep6(element) {
+    element.style.transition = 'transform 0.3s ease';
+    element.style.transform = 'translate(0px, 0px)';
+    step6TranslateX = 0;
+    step6TranslateY = 0;
+    element.style.zIndex = '';
+    setTimeout(() => {
+        element.style.transition = '';
+    }, 300);
+}
+
+// ピース本体のドラッグ移動セットアップ
+function setupStep6DragMove(pieceContainer) {
+    let isDraggingRotHandle = false;
+
+    pieceContainer.addEventListener('pointerdown', (e) => {
+        if (pieceContainer.classList.contains('correct')) return;
+        // 回転ハンドルのドラッグ中は移動しない
+        if (e.target.closest('.rotation-handle')) return;
+
+        step6IsDragging = true;
+        step6MoveTotalDist = 0;
+        step6PointerDownX = e.clientX;
+        step6PointerDownY = e.clientY;
+
+        step6DragStartX = e.clientX - step6TranslateX;
+        step6DragStartY = e.clientY - step6TranslateY;
+
+        pieceContainer.setPointerCapture(e.pointerId);
+        pieceContainer.style.zIndex = 1000;
+        pieceContainer.style.transition = 'none';
+        document.body.style.touchAction = 'none';
+    });
+
+    pieceContainer.addEventListener('pointermove', (e) => {
+        if (!step6IsDragging) return;
+        step6MoveTotalDist = Math.hypot(e.clientX - step6PointerDownX, e.clientY - step6PointerDownY);
+
+        step6TranslateX = e.clientX - step6DragStartX;
+        step6TranslateY = e.clientY - step6DragStartY;
+
+        pieceContainer.style.transform = `translate(${step6TranslateX}px, ${step6TranslateY}px)`;
+    });
+
+    pieceContainer.addEventListener('pointerup', (e) => {
+        if (!step6IsDragging) return;
+        step6IsDragging = false;
+        pieceContainer.releasePointerCapture(e.pointerId);
+        document.body.style.touchAction = '';
+
+        const wasTap = step6MoveTotalDist < 10;
+
+        if (wasTap) {
+            // タップ：タップモードなら回転
+            if (currentRotationMode === 'tap') {
+                rotateStep6Piece();
+            }
+            // 元の位置に戻す（タップでは移動しない）
+            pieceContainer.style.transform = `translate(${step6TranslateX}px, ${step6TranslateY}px)`;
+            pieceContainer.style.zIndex = '';
+            pieceContainer.style.transition = '';
+            return;
+        }
+
+        // ドラッグ終了：ドロップ判定
+        checkStep6AnswerOnDrop();
+    });
+
+    pieceContainer.addEventListener('pointercancel', () => {
+        if (step6IsDragging) {
+            step6IsDragging = false;
+            document.body.style.touchAction = '';
+            snapBackStep6(pieceContainer);
+        }
+    });
 }
 
 // Drag Rotation Logic
@@ -717,8 +832,7 @@ function setupStep6Drag(handle, container) {
         handle.style.transition = 'transform 0.1s ease'; // スナップアニメーション
         updateStep6RotationDisplay();
 
-        // 少し待ってから判定（アニメーション完了後）
-        setTimeout(checkStep6Answer, 200);
+        // ドラッグ回転モードでは回転だけでは正解にならない（見本に重ねて判定）
     });
 }
 
